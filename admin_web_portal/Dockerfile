@@ -4,12 +4,20 @@ FROM ubuntu:22.04 AS build
 # Install dependencies
 RUN apt-get update && apt-get install -y curl git unzip xz-utils zip libglu1-mesa
 
-# Download Flutter SDK
-RUN git clone https://github.com/flutter/flutter.git /usr/local/flutter -b stable
-ENV PATH="/usr/local/flutter/bin:/usr/local/flutter/bin/cache/dart-sdk/bin:${PATH}"
+# Create a non-root user to avoid tar ownership errors on Render
+RUN useradd -m flutteruser
+USER flutteruser
+WORKDIR /home/flutteruser/app
 
-WORKDIR /app
-COPY . .
+# Download Flutter SDK
+RUN git clone https://github.com/flutter/flutter.git /home/flutteruser/flutter -b stable
+ENV PATH="/home/flutteruser/flutter/bin:/home/flutteruser/flutter/bin/cache/dart-sdk/bin:${PATH}"
+
+# Precache flutter for web only
+RUN flutter config --enable-web
+RUN flutter precache --web
+
+COPY --chown=flutteruser:flutteruser . .
 
 # Build the app
 RUN flutter pub get
