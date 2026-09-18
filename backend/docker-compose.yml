@@ -1,0 +1,45 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: appliance_db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: appliance_service
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: appliance_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: appliance_livekit
+    command: --dev
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+
+  synapse:
+    image: matrixdotorg/synapse:latest
+    container_name: appliance_synapse
+    environment:
+      - SYNAPSE_SERVER_NAME=my.matrix.server
+      - SYNAPSE_REPORT_STATS=no
+    ports:
+      - "8008:8008"
+
+volumes:
+  postgres_data:
+  redis_data:
