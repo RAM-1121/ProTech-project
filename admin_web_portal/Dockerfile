@@ -25,7 +25,7 @@ RUN flutter build web
 
 # Stage 2: Serve the app securely using a distroless image (Zero CVEs)
 FROM cgr.dev/chainguard/nginx:latest
-COPY --from=build /app/build/web /usr/share/nginx/html
+COPY --from=build /home/flutteruser/app/build/web /usr/share/nginx/html
 
 # Default port for non-root Chainguard Nginx is 8080
 EXPOSE 8080
