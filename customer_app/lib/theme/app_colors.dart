@@ -14,4 +14,12 @@ class AppColors {
   static const Color textMuted = Color(0xFF64748B); // Slate Grey
   
   static const Color border = Color(0xFFE2E8F0); // Light Slate
+
+  // Gradient Colors
+  static const Color gradientACStart = Color(0xFF3B82F6);
+  static const Color gradientACEnd = Color(0xFF1D4ED8);
+  static const Color gradientFridgeStart = Color(0xFFF97316);
+  static const Color gradientFridgeEnd = Color(0xFFC2410C);
+  static const Color gradientElectricStart = Color(0xFF22C55E);
+  static const Color gradientElectricEnd = Color(0xFF15803D);
 }

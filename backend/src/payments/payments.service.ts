@@ -26,4 +26,15 @@ export class PaymentsService {
     
     return url.toString();
   }
+
+  private companyUpiId: string = 'protech@upi';
+
+  getCompanyUpiId(): string {
+    return this.companyUpiId;
+  }
+
+  setCompanyUpiId(newUpiId: string): void {
+    this.companyUpiId = newUpiId;
+  }
 }
+

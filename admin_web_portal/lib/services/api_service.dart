@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  static const String baseUrl = 'https://protech-backend-83hl.onrender.com/api';
+  static const String baseUrl = 'http://localhost:3000/api';
 
   Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -25,6 +25,7 @@ class ApiService {
       body: jsonEncode(body),
     );
     if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (response.body.isEmpty) return null;
       return jsonDecode(response.body);
     } else {
       throw Exception('API Error: ${response.statusCode} - ${response.body}');
@@ -37,6 +38,7 @@ class ApiService {
       headers: await _getHeaders(),
     );
     if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (response.body.isEmpty) return null;
       return jsonDecode(response.body);
     } else {
       throw Exception('API Error: ${response.statusCode} - ${response.body}');
@@ -50,7 +52,26 @@ class ApiService {
       body: jsonEncode(body),
     );
     if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (response.body.isEmpty) return null;
       return jsonDecode(response.body);
+    } else {
+      throw Exception('API Error: ${response.statusCode} - ${response.body}');
+    }
+  }
+
+  Future<dynamic> delete(String endpoint) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl$endpoint'),
+      headers: await _getHeaders(),
+    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      // Handle empty responses
+      if (response.body.isEmpty) return null;
+      try {
+        return jsonDecode(response.body);
+      } catch (_) {
+        return response.body;
+      }
     } else {
       throw Exception('API Error: ${response.statusCode} - ${response.body}');
     }

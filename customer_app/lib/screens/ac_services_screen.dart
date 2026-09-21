@@ -2,10 +2,53 @@ import 'package:flutter/material.dart';
 import '../models/app_state.dart';
 import '../theme/app_colors.dart';
 
-class ACServicesScreen extends StatelessWidget {
+class ACServicesScreen extends StatefulWidget {
   const ACServicesScreen({super.key});
 
+  @override
+  State<ACServicesScreen> createState() => _ACServicesScreenState();
+}
+
+class _ACServicesScreenState extends State<ACServicesScreen> {
+  bool _showItems = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) {
+        setState(() => _showItems = true);
+      }
+    });
+  }
+
   void _bookService(BuildContext context, String serviceName) async {
+    final profile = AppState().profileNotifier.value;
+    if (profile.name.isEmpty || profile.name == 'Guest User' || profile.name == 'Guest' || profile.mapLocation.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Profile Incomplete'),
+          content: const Text('Please complete your profile including your name and map location before booking a service.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/register');
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMid),
+              child: const Text('Complete Profile', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     // Generate order and save to state
     final orderId = await AppState().addOrder('AC', serviceName);
 
@@ -19,8 +62,7 @@ class ACServicesScreen extends StatelessWidget {
         actions: [
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context); // Close popup
-              Navigator.pop(context); // Return to Booking Tab
+              Navigator.pop(context); // Close the dialog
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMid),
             child: const Text('OK', style: TextStyle(color: Colors.white)),
@@ -35,11 +77,16 @@ class ACServicesScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
+        backgroundColor: AppColors.primaryDark,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context), // Go back to Booking tab
         ),
-        title: const Text('AC Services'),
+        title: const Text(
+          'AC Services',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
@@ -61,26 +108,53 @@ class ACServicesScreen extends StatelessWidget {
                       children: [
                         Text('Expert AC Care', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primaryDark)),
                         SizedBox(height: 8),
-                        Text('Professional servicing, repair, and installation.', style: TextStyle(fontSize: 14, color: AppColors.primaryMid)),
+                        Text('Professional servicing, repair, and\ninstallation.', style: TextStyle(fontSize: 14, color: AppColors.primaryMid)),
                       ],
                     ),
                   ),
                   SizedBox(width: 16),
-                  Icon(Icons.ac_unit, size: 48, color: AppColors.primaryMid),
+                  Icon(Icons.ac_unit, size: 48, color: AppColors.primaryDark),
                 ],
               ),
             ),
             const SizedBox(height: 32),
             const Text('Select Service', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
             const SizedBox(height: 16),
-            _buildServiceOption(context, 'AC Installation', 'Professional setup & mounting', Icons.build),
+            _buildAnimatedWrapper(
+                index: 0,
+                child: _buildServiceOption(context, 'AC Installation', 'Professional setup & mounting', Icons.build),
+            ),
             const SizedBox(height: 16),
-            _buildServiceOption(context, 'AC Removal', 'Safe uninstallation & packing', Icons.remove_circle_outline),
+            _buildAnimatedWrapper(
+                index: 1,
+                child: _buildServiceOption(context, 'AC Removal', 'Safe uninstallation & packing', Icons.remove_circle_outline),
+            ),
             const SizedBox(height: 16),
-            _buildServiceOption(context, 'Book A Complaint', 'Quick repair & servicing', Icons.report_problem),
+            _buildAnimatedWrapper(
+                index: 2,
+                child: _buildServiceOption(context, 'Book A Complaint', 'Quick repair & servicing', Icons.report_problem),
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAnimatedWrapper({required int index, required Widget child}) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: _showItems ? 1.0 : 0.0),
+      duration: Duration(milliseconds: 400 + (index * 150)),
+      curve: Curves.easeOutCubic,
+      builder: (context, val, animatedChild) {
+        return Transform.translate(
+          offset: Offset(0, 30 * (1 - val)),
+          child: Opacity(
+            opacity: val,
+            child: animatedChild,
+          ),
+        );
+      },
+      child: child,
     );
   }
 
@@ -106,10 +180,10 @@ class ACServicesScreen extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.primarySoft,
+                color: AppColors.primarySoft.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, size: 28, color: AppColors.primaryMid),
+              child: Icon(icon, size: 28, color: AppColors.primaryDark),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -118,17 +192,17 @@ class ACServicesScreen extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: const TextStyle(fontSize: 14, color: AppColors.textMuted),
+                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios, size: 16, color: AppColors.primaryMid),
+            const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.primaryDark),
           ],
         ),
       ),

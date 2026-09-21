@@ -12,6 +12,8 @@ import { PaymentsModule } from './payments/payments.module';
 import { RatingsModule } from './ratings/ratings.module';
 import { WarrantiesModule } from './warranties/warranties.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { PlansModule } from './plans/plans.module';
+import { ApprovalsModule } from './approvals/approvals.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { NotificationsModule } from './notifications/notifications.module';
     RatingsModule,
     WarrantiesModule,
     NotificationsModule,
+    PlansModule,
+    ApprovalsModule,
   ],
   controllers: [AppController],
   providers: [AppService, EventsGateway],

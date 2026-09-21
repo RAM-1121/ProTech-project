@@ -3,13 +3,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-
+import 'package:socket_io_client/socket_io_client.dart' as io;
 class Order {
   final String orderId;
   final String serviceName;
   String status;
   String executiveName;
   String executivePhone;
+  String? executiveCoordinates;
+  int? rating;
 
   Order({
     required this.orderId,
@@ -17,6 +19,8 @@ class Order {
     this.status = 'Awaiting for Approval from Admin',
     this.executiveName = 'Pending',
     this.executivePhone = 'N/A',
+    this.executiveCoordinates,
+    this.rating,
   });
 
   Map<String, dynamic> toJson() => {
@@ -25,6 +29,8 @@ class Order {
     'status': status,
     'executiveName': executiveName,
     'executivePhone': executivePhone,
+    'executiveCoordinates': executiveCoordinates,
+    'rating': rating,
   };
 
   factory Order.fromJson(Map<String, dynamic> json) => Order(
@@ -33,6 +39,8 @@ class Order {
     status: json['status'],
     executiveName: json['executiveName'],
     executivePhone: json['executivePhone'],
+    executiveCoordinates: json['executiveCoordinates'],
+    rating: json['rating'],
   );
 }
 
@@ -73,11 +81,32 @@ class AppState {
 
   void setMobileNumber(String mobile) {
     currentMobileNumber = mobile;
+    _initSocket();
+  }
+
+  io.Socket? _socket;
+
+  void _initSocket() {
+    if (_socket != null) return;
+    _socket = io.io(_apiBaseUrl, io.OptionBuilder()
+      .setTransports(['websocket'])
+      .enableAutoConnect()
+      .build()
+    );
+    _socket!.onConnect((_) {
+      debugPrint('Customer App Connected to WebSocket');
+    });
+    _socket!.on('update_received', (data) {
+      debugPrint('Customer App Update received: $data');
+      fetchOrdersFromServer();
+    });
   }
 
   String get _apiBaseUrl {
-    return 'http://127.0.0.1:3000';
+    return 'http://localhost:3000';
   }
+
+  String get apiBaseUrl => _apiBaseUrl;
 
   Future<String> addOrder(String prefix, String serviceName) async {
     final random = Random();
@@ -87,10 +116,11 @@ class AppState {
     final newOrder = Order(orderId: orderId, serviceName: serviceName);
     
     try {
+      await loadProfile(); // ensure the profile is fully loaded from local storage
       final profile = profileNotifier.value;
       
       final response = await http.post(
-        Uri.parse('$_apiBaseUrl/api/work-orders'),
+        Uri.parse('$_apiBaseUrl/api/bookings'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'orderId': orderId,
@@ -146,6 +176,19 @@ class AppState {
     await prefs.setString('${currentMobileNumber}_orders', encodedData);
   }
 
+  int? getOrderRating(String orderId) {
+    return _orderRatings[orderId];
+  }
+
+  Future<void> setOrderRating(String orderId, int rating) async {
+    _orderRatings[orderId] = rating;
+    if (currentMobileNumber.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('${currentMobileNumber}_rating_$orderId', rating);
+  }
+
+  final Map<String, int> _orderRatings = {};
+
   Future<void> loadOrders() async {
     if (currentMobileNumber.isEmpty) return;
     
@@ -155,6 +198,14 @@ class AppState {
     if (encodedData != null) {
       final List<dynamic> decodedData = jsonDecode(encodedData);
       ordersNotifier.value = decodedData.map((json) => Order.fromJson(json)).toList();
+      
+      // Load ratings for existing orders
+      for (final order in ordersNotifier.value) {
+        final rating = prefs.getInt('${currentMobileNumber}_rating_${order.orderId}');
+        if (rating != null) {
+          _orderRatings[order.orderId] = rating;
+        }
+      }
     } else {
       ordersNotifier.value = []; // clear for new user
     }
@@ -176,46 +227,65 @@ class AppState {
     
     try {
       final response = await http.get(
-        Uri.parse('$_apiBaseUrl/api/work-orders?customerMobile=$currentMobileNumber'),
+        Uri.parse('$_apiBaseUrl/api/bookings?customerMobile=$currentMobileNumber'),
       );
 
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> responseData = jsonDecode(response.body);
-        if (responseData['success'] == true) {
-          final List<dynamic> serverOrders = responseData['data'];
-          
-          final List<Order> updatedList = serverOrders.map((serverOrder) {
-            final nextJsStatus = serverOrder['status'];
-            final assignedEmployee = serverOrder['assignedEmployee'];
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final dynamic decodedData = jsonDecode(response.body);
+        
+        List<dynamic> serverOrders = [];
+        if (decodedData is List) {
+          serverOrders = decodedData;
+        } else if (decodedData is Map && decodedData['data'] is List) {
+          serverOrders = decodedData['data'];
+        }
+
+        final List<Order> updatedList = serverOrders.map((serverOrder) {
+          final nextJsStatus = serverOrder['status']?.toString().toUpperCase();
+          final assignedEmployee = serverOrder['assignedEmployee'];
             
             // Map Next.js status to Flutter UI status
-            String uiStatus = 'Awaiting for Approval from Admin';
+            String uiStatus = 'Your Complaint is Pending';
             if (nextJsStatus == 'ASSIGNED') {
-              uiStatus = 'Assign to Executive';
+              uiStatus = 'Assign to Executive Person';
             } else if (nextJsStatus == 'ACCEPTED') {
-              uiStatus = 'On the Way';
+              uiStatus = 'Executive Person Is On The Way';
             } else if (nextJsStatus == 'IN_PROGRESS') {
-              uiStatus = 'In Progress';
-            } else if (nextJsStatus == 'PENDING') {
-              uiStatus = 'Pending';
-            } else if (nextJsStatus == 'COMPLETED') {
-              uiStatus = 'Closed';
+              uiStatus = 'Executive Person Is On The Way'; // fallback
+            } else if (nextJsStatus == 'PENDING' || nextJsStatus == 'EXECUTIVE_PENDING') {
+              uiStatus = 'Your Complaint is Pending';
+            } else if (nextJsStatus == 'PAYMENT PENDING') {
+              uiStatus = 'Payment Pending';
+            } else if (nextJsStatus == 'COMPLETED' || nextJsStatus == 'COMPLAINT CLOSED THANK YOU FOR CHOOSING PROTECH COOLING SOLUTIONS') {
+              uiStatus = 'Complaint Closed Thank You For choosing Protech Cooling Solutions';
             } else if (nextJsStatus == 'CANCELLED') {
               uiStatus = 'Your complaint deleted by Protech Cooling solutions';
+            } else if (nextJsStatus == 'Deleted By ADMIN' || nextJsStatus == 'DELETED BY ADMIN') {
+              uiStatus = 'Deleted By ADMIN';
             }
             
+            String? execCoords;
+            if (assignedEmployee != null && assignedEmployee['currentLocation'] != null) {
+              final coords = assignedEmployee['currentLocation']['coordinates'];
+              if (coords != null && coords.length >= 2) {
+                // PostGIS uses [lng, lat]
+                execCoords = '${coords[1]},${coords[0]}';
+              }
+            }
+
             return Order(
-              orderId: serverOrder['workOrderId'],
-              serviceName: serverOrder['complaintType'],
+              orderId: serverOrder['orderId']?.toString() ?? serverOrder['workOrderId']?.toString() ?? serverOrder['id']?.toString() ?? '',
+              serviceName: serverOrder['serviceName']?.toString() ?? serverOrder['complaintType']?.toString() ?? '',
               status: uiStatus,
               executiveName: assignedEmployee != null ? assignedEmployee['name'] : 'Pending',
               executivePhone: assignedEmployee != null ? assignedEmployee['mobile'] : 'N/A',
+              executiveCoordinates: execCoords,
+              rating: serverOrder['rating'] != null ? int.tryParse(serverOrder['rating'].toString()) : null,
             );
           }).toList();
           
           ordersNotifier.value = updatedList;
           await _saveOrders(updatedList);
-        }
       } else {
         debugPrint('Failed to fetch orders from server: ${response.statusCode}');
       }
@@ -230,15 +300,15 @@ class AppState {
       if (updatedList[i].orderId == orderId) {
         switch (updatedList[i].status) {
           case 'Awaiting for Approval from Admin':
-            updatedList[i].status = 'Assign to Executive';
+            updatedList[i].status = 'Assign to Executive Person';
             updatedList[i].executiveName = 'John Doe';
             updatedList[i].executivePhone = '+91 9876543210';
             break;
-          case 'Assign to Executive':
-            updatedList[i].status = 'On the Way';
+          case 'Assign to Executive Person':
+            updatedList[i].status = 'Executive Person Is On The Way';
             break;
-          case 'On the Way':
-            updatedList[i].status = 'Closed';
+          case 'Executive Person Is On The Way':
+            updatedList[i].status = 'Complaint Closed Thank You For choosing Protech Cooling Solutions';
             break;
         }
         break;
@@ -250,35 +320,63 @@ class AppState {
 
   Future<void> updateProfile(UserProfile newProfile) async {
     profileNotifier.value = newProfile;
-    if (currentMobileNumber.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('${currentMobileNumber}_profile_name', newProfile.name);
-    await prefs.setString('${currentMobileNumber}_profile_mobile', newProfile.mobile);
-    await prefs.setString('${currentMobileNumber}_profile_email', newProfile.email);
-    await prefs.setString('${currentMobileNumber}_profile_address', newProfile.address);
-    await prefs.setString('${currentMobileNumber}_profile_mapLocation', newProfile.mapLocation);
-    await prefs.setString('${currentMobileNumber}_profile_picture', newProfile.profilePicturePath);
-    await prefs.setBool('${currentMobileNumber}_hasRegisteredProfile', true);
+    await prefs.setString('user_name', newProfile.name);
+    await prefs.setString('user_mobile', newProfile.mobile);
+    await prefs.setString('user_email', newProfile.email);
+    await prefs.setString('full_address', newProfile.address);
+    // address_flat, street, city, pincode are already saved individually by the screens
+    // We shouldn't overwrite address_flat with the full concatenated address.
+    if (newProfile.mapLocation.isNotEmpty && newProfile.mapLocation.contains(',')) {
+      try {
+        final parts = newProfile.mapLocation.split(',');
+        await prefs.setDouble('user_lat', double.parse(parts[0]));
+        await prefs.setDouble('user_lng', double.parse(parts[1]));
+      } catch (e) {
+        debugPrint('Error parsing coordinates: $e');
+      }
+    }
+    await prefs.setString('profile_picture', newProfile.profilePicturePath);
+    await prefs.setBool('is_registered', true);
   }
 
   Future<bool> loadProfile() async {
-    if (currentMobileNumber.isEmpty) return false;
     final prefs = await SharedPreferences.getInstance();
-    final hasRegistered = prefs.getBool('${currentMobileNumber}_hasRegisteredProfile') ?? false;
+    final hasRegistered = prefs.getBool('is_registered') ?? false;
     
     if (hasRegistered) {
-      final name = prefs.getString('${currentMobileNumber}_profile_name') ?? '';
-      final mobile = prefs.getString('${currentMobileNumber}_profile_mobile') ?? '';
-      final email = prefs.getString('${currentMobileNumber}_profile_email') ?? '';
-      final address = prefs.getString('${currentMobileNumber}_profile_address') ?? '';
-      final mapLocation = prefs.getString('${currentMobileNumber}_profile_mapLocation') ?? '';
-      final picPath = prefs.getString('${currentMobileNumber}_profile_picture') ?? '';
+      final name = prefs.getString('user_name') ?? '';
+      final mobile = prefs.getString('user_mobile') ?? currentMobileNumber;
+      final email = prefs.getString('user_email') ?? '';
+      
+      final flat = prefs.getString('address_flat') ?? '';
+      final street = prefs.getString('address_street') ?? '';
+      final city = prefs.getString('address_city') ?? '';
+      final pin = prefs.getString('address_pincode') ?? '';
+      
+      final parts = [flat, street, city, pin].where((e) => e.isNotEmpty);
+      final uniqueTokens = <String>{};
+      for (final p in parts) {
+        uniqueTokens.addAll(p.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty));
+      }
+      String fullAddress = uniqueTokens.join(', ');
+      
+      // Fallback to the saved full_address if individual components aren't set
+      if (fullAddress.isEmpty) {
+        fullAddress = prefs.getString('full_address') ?? '';
+      }
+      
+      final lat = prefs.getDouble('user_lat');
+      final lng = prefs.getDouble('user_lng');
+      final mapLocation = (lat != null && lng != null) ? '$lat,$lng' : '';
+      
+      final picPath = prefs.getString('profile_picture') ?? '';
       
       profileNotifier.value = UserProfile(
         name: name,
-        mobile: mobile,
+        mobile: mobile.isNotEmpty ? mobile : currentMobileNumber,
         email: email,
-        address: address,
+        address: fullAddress,
         mapLocation: mapLocation,
         profilePicturePath: picPath,
       );

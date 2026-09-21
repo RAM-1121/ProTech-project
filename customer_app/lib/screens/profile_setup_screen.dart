@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import '../models/app_state.dart';
 import 'location_picker_screen.dart';
 import '../theme/app_colors.dart';
@@ -18,11 +20,22 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final TextEditingController _addressController = TextEditingController();
 
   String _pinnedLocation = "No location pinned";
+  String _profilePicturePath = "";
 
   @override
   void initState() {
     super.initState();
     _mobileController.text = AppState().currentMobileNumber;
+  }
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      setState(() {
+        _profilePicturePath = pickedFile.path;
+      });
+    }
   }
 
   void _openMapToPinLocation() async {
@@ -49,6 +62,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         email: _emailController.text,
         address: _addressController.text,
         mapLocation: _pinnedLocation == "No location pinned" ? "" : _pinnedLocation,
+        profilePicturePath: _profilePicturePath,
       ));
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -65,6 +79,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Complete Your Profile'),
       ),
@@ -73,6 +88,38 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Center(
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 50,
+                    backgroundColor: AppColors.border,
+                    backgroundImage: _profilePicturePath.isNotEmpty
+                        ? FileImage(File(_profilePicturePath))
+                        : null,
+                    child: _profilePicturePath.isEmpty
+                        ? const Icon(Icons.person, size: 50, color: AppColors.textMuted)
+                        : null,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: GestureDetector(
+                      onTap: _pickImage,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: const BoxDecoration(
+                          color: AppColors.primaryMid,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
             TextField(
               controller: _nameController,
               decoration: InputDecoration(

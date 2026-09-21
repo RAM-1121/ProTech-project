@@ -80,10 +80,10 @@ class NotificationService {
       final fcmToken = await FirebaseMessaging.instance.getToken();
       if (fcmToken != null) {
         debugPrint("FCM Token: $fcmToken");
-        String apiBaseUrl = 'http://127.0.0.1:3000';
+        String apiBaseUrl = 'http://localhost:3000';
         try {
           if (Platform.isAndroid) {
-            apiBaseUrl = 'http://127.0.0.1:3000';
+            apiBaseUrl = 'http://localhost:3000';
           }
         } catch (_) {}
         

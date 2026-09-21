@@ -18,19 +18,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       'title': 'Receive Tasks Instantly',
       'description':
           'Get notified as soon as a new customer complaint is assigned to you by the Admin.',
-      'icon': 'assignment',
+      'image': 'assets/images/walkthrough_1.jpg',
     },
     {
       'title': 'Track Your Earnings',
       'description':
           'Earn reward points for every completed task and redeem them for bonuses.',
-      'icon': 'account_balance_wallet',
+      'image': 'assets/images/walkthrough_2.jpg',
     },
     {
       'title': 'Manage Availability',
       'description':
           'Easily go online when you are ready to work, or request leave directly from the app.',
-      'icon': 'event_available',
+      'image': 'assets/images/walkthrough_1.jpg',
     },
   ];
 
@@ -44,18 +44,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  IconData _getIconData(String iconName) {
-    switch (iconName) {
-      case 'assignment':
-        return Icons.assignment_outlined;
-      case 'account_balance_wallet':
-        return Icons.account_balance_wallet_outlined;
-      case 'event_available':
-        return Icons.event_available_outlined;
-      default:
-        return Icons.star_outline;
-    }
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -81,20 +70,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(32),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary
-                                .withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            _getIconData(data['icon']!),
-                            size: 100,
-                            color: theme.colorScheme.primary,
-                          ),
+                        Image.asset(
+                          data['image']!,
+                          height: 250,
+                          fit: BoxFit.contain,
                         ),
-                        const SizedBox(height: 64),
+                        const SizedBox(height: 32),
                         Text(
                           data['title']!,
                           style: theme.textTheme.displayLarge
@@ -149,7 +130,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: _completeOnboarding,
-                        child: const Text('Get Started',
+                        child: const Text('Start your service',
                             style: TextStyle(
                                 fontSize: 18, fontWeight: FontWeight.bold)),
                       ),

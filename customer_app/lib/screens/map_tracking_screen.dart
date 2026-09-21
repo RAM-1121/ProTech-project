@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import '../models/app_state.dart';
 import '../theme/app_colors.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+
 
 class MapTrackingScreen extends StatefulWidget {
   const MapTrackingScreen({super.key});
@@ -13,6 +17,8 @@ class MapTrackingScreen extends StatefulWidget {
 class _MapTrackingScreenState extends State<MapTrackingScreen> {
   Timer? _refreshTimer;
 
+  bool _showItems = false;
+
   @override
   void initState() {
     super.initState();
@@ -22,6 +28,12 @@ class _MapTrackingScreenState extends State<MapTrackingScreen> {
     // Auto refresh every 10 seconds
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       AppState().fetchOrdersFromServer();
+    });
+
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) {
+        setState(() => _showItems = true);
+      }
     });
   }
 
@@ -37,11 +49,59 @@ class _MapTrackingScreenState extends State<MapTrackingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Tracking Orders'),
-        automaticallyImplyLeading: false,
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: const Text('Tracking Orders'),
+          automaticallyImplyLeading: false,
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(60),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+              child: Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryDark.withValues(alpha: 0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(4.0),
+                  child: TabBar(
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    dividerColor: Colors.transparent,
+                    indicator: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      color: AppColors.primaryMid,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primaryMid.withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    labelColor: Colors.white,
+                    unselectedLabelColor: AppColors.textMuted,
+                    labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                    tabs: const [
+                      Tab(text: 'Active'),
+                      Tab(text: 'Completed'),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         actions: [
           ValueListenableBuilder<List<String>>(
               valueListenable: AppState().clearedNotificationsNotifier,
@@ -94,46 +154,73 @@ class _MapTrackingScreenState extends State<MapTrackingScreen> {
       body: ValueListenableBuilder<List<Order>>(
         valueListenable: AppState().ordersNotifier,
         builder: (context, orders, child) {
-          if (orders.isEmpty) {
-            return RefreshIndicator(
-              onRefresh: _handleRefresh,
-              child: const CustomScrollView(
-                slivers: [
-                  SliverFillRemaining(
-                    child: Center(
-                      child: Text(
-                        'No complaints booked yet.',
-                        style: TextStyle(fontSize: 18, color: Colors.grey),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
+          final activeOrders = orders.where((o) => o.status != 'Complaint Closed Thank You For choosing Protech Cooling Solutions' && o.status != 'Your complaint deleted by Protech Cooling solutions' && o.status != 'Deleted By ADMIN').toList();
+          final completedOrders = orders.where((o) => o.status == 'Complaint Closed Thank You For choosing Protech Cooling Solutions' || o.status == 'Your complaint deleted by Protech Cooling solutions' || o.status == 'Deleted By ADMIN').toList();
 
-          return RefreshIndicator(
-            onRefresh: _handleRefresh,
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
-              itemCount: orders.length,
-              itemBuilder: (context, index) {
-                final order =
-                    orders[orders.length - 1 - index]; // Show latest first
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 16.0),
-                  child: _buildTrackingCard(
-                    orderId: order.orderId,
-                    service: order.serviceName,
-                    executiveName: order.executiveName,
-                    executivePhone: order.executivePhone,
-                    status: order.status,
-                    isPending:
-                        order.status == 'Awaiting for Approval from Admin' ||
-                            order.status == 'Pending',
-                  ),
-                );
-              },
+          return TabBarView(
+            children: [
+              _buildOrdersList(activeOrders, isActive: true),
+              _buildOrdersList(completedOrders, isActive: false),
+            ],
+          );
+        },
+      ),
+    ));
+  }
+
+  Widget _buildOrdersList(List<Order> ordersToDisplay, {required bool isActive}) {
+    if (ordersToDisplay.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _handleRefresh,
+        child: CustomScrollView(
+          slivers: [
+            SliverFillRemaining(
+              child: Center(
+                child: Text(
+                  isActive ? 'No active complaints.' : 'No completed complaints.',
+                  style: const TextStyle(fontSize: 18, color: Colors.grey),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _handleRefresh,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
+        itemCount: ordersToDisplay.length,
+        itemBuilder: (context, index) {
+          final order = ordersToDisplay[ordersToDisplay.length - 1 - index]; // Show latest first
+          return TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: _showItems ? 1.0 : 0.0),
+            duration: Duration(milliseconds: 400 + (index * 150)),
+            curve: Curves.easeOutCubic,
+            builder: (context, val, child) {
+              return Transform.translate(
+                offset: Offset(0, 50 * (1 - val)),
+                child: Opacity(
+                  opacity: val,
+                  child: child,
+                ),
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 16.0),
+              child: _ExpandableTrackingCard(
+                order: order,
+                isActive: isActive,
+                detailedCard: _buildDetailedTrackingCard(
+                  orderId: order.orderId,
+                  service: order.serviceName,
+                  executiveName: order.executiveName,
+                  executivePhone: order.executivePhone,
+                  status: order.status,
+                  isPending: order.status == 'Your Complaint is Pending' || order.status == 'Pending' || order.status == 'Your Complaint is Pending',
+                ),
+              ),
             ),
           );
         },
@@ -268,7 +355,7 @@ class _MapTrackingScreenState extends State<MapTrackingScreen> {
     );
   }
 
-  Widget _buildTrackingCard({
+  Widget _buildDetailedTrackingCard({
     required String orderId,
     required String service,
     required String executiveName,
@@ -276,6 +363,8 @@ class _MapTrackingScreenState extends State<MapTrackingScreen> {
     required String status,
     bool isPending = false,
   }) {
+    final isClosed = status == 'Complaint Closed Thank You For choosing Protech Cooling Solutions';
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -355,38 +444,135 @@ class _MapTrackingScreenState extends State<MapTrackingScreen> {
           ),
           const SizedBox(height: 16),
           _buildLifecycleTimeline(status),
+          if (isClosed) ...[
+            const SizedBox(height: 24),
+            const Divider(),
+            const SizedBox(height: 12),
+            _buildRatingWidget(orderId),
+          ],
         ],
       ),
     );
   }
 
+  Widget _buildRatingWidget(String orderId) {
+    bool isSubmitting = false;
+
+    return StatefulBuilder(
+      builder: (context, setState) {
+        // Read from AppState order
+        final order = AppState().ordersNotifier.value.firstWhere(
+            (o) => o.orderId == orderId,
+            orElse: () => Order(orderId: orderId, serviceName: '')
+        );
+
+        int currentRating = order.rating ?? AppState().getOrderRating(orderId) ?? 0;
+        bool isSubmitted = order.rating != null;
+
+        Future<void> submitRating() async {
+          if (currentRating == 0) return;
+          setState(() { isSubmitting = true; });
+
+          try {
+            final response = await http.patch(
+              Uri.parse('${AppState().apiBaseUrl}/api/bookings/$orderId/rating'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'rating': currentRating}),
+            );
+            
+            if (!context.mounted) return;
+
+            if (response.statusCode == 200 || response.statusCode == 201) {
+              order.rating = currentRating;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Rating submitted successfully!')),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Failed to submit rating. Please try again.')),
+              );
+            }
+          } catch (e) {
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error: $e')),
+            );
+          } finally {
+            if (context.mounted) {
+              setState(() { isSubmitting = false; });
+            }
+          }
+        }
+
+        return Column(
+          children: [
+            const Text(
+              'How was your service?',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(5, (index) {
+                return IconButton(
+                  icon: Icon(
+                    index < currentRating ? Icons.star : Icons.star_border,
+                    color: index < currentRating ? Colors.amber : Colors.grey,
+                    size: 32,
+                  ),
+                  onPressed: isSubmitted || isSubmitting ? null : () {
+                    AppState().setOrderRating(orderId, index + 1);
+                    setState(() {});
+                  },
+                );
+              }),
+            ),
+            if (!isSubmitted && currentRating > 0) ...[
+              const SizedBox(height: 16),
+              isSubmitting
+                  ? const CircularProgressIndicator()
+                  : ElevatedButton(
+                      onPressed: submitRating,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryMid,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                      ),
+                      child: const Text('Submit Rating', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+            ]
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildLifecycleTimeline(String currentStatus) {
     final isDeleted =
-        currentStatus == 'Your complaint deleted by Protech Cooling solutions';
+        currentStatus.toLowerCase().contains('deleted');
     final stages = <String>[
-      'Awaiting for Approval from Admin',
-      'Assign to Executive',
-      'On the Way',
+      'Your Complaint is Pending',
+      'Assign to Executive Person',
+      'Executive Person Is On The Way',
+      'Payment Pending',
+      'Complaint Closed Thank You For choosing Protech Cooling Solutions'
     ];
-
-    if (currentStatus == 'In Progress' || currentStatus == 'Closed') {
-      stages.add('In Progress');
-    } else if (currentStatus == 'Pending') {
-      stages.add('In Progress');
-      stages.add('Pending');
-    }
-
-    stages.add(isDeleted
-        ? 'Your complaint deleted by Protech Cooling solutions'
-        : 'Closed');
 
     int currentIndex = stages.indexOf(currentStatus);
     if (currentIndex == -1) {
-      if (currentStatus == 'Closed') {
-        currentIndex = stages.length - 1;
+      if (isDeleted) {
+        // If it's deleted, replace the final stage with the deleted message
+        stages[4] = 'Request is deleted';
+        currentIndex = 4;
       } else {
         currentIndex = 0;
       }
+    } else if (isDeleted) {
+      stages[4] = 'Request is deleted';
+      currentIndex = 4;
     }
 
     return Column(
@@ -448,7 +634,139 @@ class _MapTrackingScreenState extends State<MapTrackingScreen> {
   }
 
   String _formatStageName(String stage) {
-    if (stage == 'Awaiting for Approval from Admin') return 'Awaiting Approval';
     return stage;
   }
+
 }
+
+class _ExpandableTrackingCard extends StatefulWidget {
+  final Order order;
+  final bool isActive;
+  final Widget detailedCard;
+
+  const _ExpandableTrackingCard({
+    required this.order,
+    required this.isActive,
+    required this.detailedCard,
+  });
+
+  @override
+  State<_ExpandableTrackingCard> createState() => _ExpandableTrackingCardState();
+}
+
+class _ExpandableTrackingCardState extends State<_ExpandableTrackingCard> {
+  bool _isExpanded = false;
+
+  Widget _buildCapsuleButton(String text, VoidCallback onPressed) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(30),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.primaryMid,
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primaryMid.withValues(alpha: 0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          text,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isCompleted = !widget.isActive;
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryDark.withValues(alpha: 0.08),
+            spreadRadius: 2,
+            blurRadius: 15,
+            offset: const Offset(0, 6),
+          ),
+        ],
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Order ID: ${widget.order.orderId}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isCompleted ? (widget.order.status.toLowerCase().contains('deleted') ? Colors.red.shade100 : Colors.green.shade100) : (widget.order.status == 'Payment Pending' ? Colors.orange.shade100 : (widget.order.status == 'Pending' || widget.order.status == 'Your Complaint is Pending' ? AppColors.primarySoft : AppColors.primaryMid)),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  isCompleted ? (widget.order.status.toLowerCase().contains('deleted') ? 'Deleted' : 'Completed') : (widget.order.status == 'Payment Pending' ? 'Payment Pending' : (widget.order.status == 'Pending' || widget.order.status == 'Your Complaint is Pending' ? 'Pending' : 'Active')),
+                  style: TextStyle(
+                    color: isCompleted ? (widget.order.status.toLowerCase().contains('deleted') ? Colors.red.shade800 : Colors.green.shade800) : (widget.order.status == 'Payment Pending' ? Colors.orange.shade800 : (widget.order.status == 'Pending' || widget.order.status == 'Your Complaint is Pending' ? AppColors.primaryDark : Colors.white)),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 24),
+          Text(
+            widget.order.serviceName,
+            style: const TextStyle(
+                fontSize: 18,
+                color: AppColors.primaryDark,
+                fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          if (isCompleted) ...[
+             Text(
+               widget.order.status.toLowerCase().contains('deleted') ? 'Request is deleted' : 'Complaint closed by Protech Cooling Solutions',
+               style: const TextStyle(fontSize: 14, color: Colors.grey),
+             ),
+             const SizedBox(height: 16),
+          ],
+          AnimatedCrossFade(
+            firstChild: const SizedBox(width: double.infinity, height: 0),
+            secondChild: Padding(
+              padding: const EdgeInsets.only(bottom: 16.0),
+              child: widget.detailedCard,
+            ),
+            crossFadeState: _isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 300),
+          ),
+          _buildCapsuleButton(_isExpanded ? 'Hide Details' : 'View Details', () {
+            setState(() {
+              _isExpanded = !_isExpanded;
+            });
+          }),
+
+        ],
+      ),
+    );
+  }
+}
+

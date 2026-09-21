@@ -12,6 +12,9 @@ export class User {
   id: string;
 
   @Column({ unique: true, nullable: true })
+  employeeId: string;
+
+  @Column({ unique: true, nullable: true })
   email: string;
 
   @Column({ unique: true, nullable: true })
@@ -42,8 +45,45 @@ export class User {
   })
   currentLocation: { type: 'Point'; coordinates: [number, number] };
 
+  // Executive specific fields
+  @Column({ nullable: true })
+  status: string;
+
+  @Column({ nullable: true })
+  color: string; // Stored as hex string, e.g., '#4CAF50'
+
+  @Column({ nullable: true })
+  bloodGroup: string;
+
+  @Column({ type: 'date', nullable: true })
+  doj: Date;
+
+  @Column({ nullable: true })
+  experience: string;
+
+  @Column({ nullable: true })
+  bankDetails: string;
+
+  @Column({ type: 'simple-json', nullable: true })
+  customFields: { title: string; value: string }[];
+
+  @Column({ type: 'date', nullable: true })
+  leaveStartDate: Date;
+
+  @Column({ type: 'date', nullable: true })
+  leaveEndDate: Date;
+
+  @Column({ type: 'simple-json', nullable: true })
+  attendanceRecords: { [dateString: string]: 'PRESENT' | 'LEAVE' | 'ABSENT' };
+
   @CreateDateColumn()
   createdAt: Date;
+
+  @Column({ type: 'int', default: 0 })
+  rewardPoints: number;
+
+  @Column({ type: 'simple-json', nullable: true })
+  rewardTransactions: any[];
 
   @UpdateDateColumn()
   updatedAt: Date;
