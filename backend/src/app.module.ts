@@ -14,14 +14,21 @@ import { WarrantiesModule } from './warranties/warranties.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PlansModule } from './plans/plans.module';
 import { ApprovalsModule } from './approvals/approvals.module';
+import * as dotenv from 'dotenv';
+dotenv.config();
 
 @Module({
   imports: [
     TypeOrmModule.forRoot({
-      type: 'better-sqlite3' as any,
-      database: 'appliance_service.sqlite',
+      type: 'postgres',
+      host: process.env.DATABASE_HOST || 'localhost',
+      port: parseInt(process.env.DATABASE_PORT || '5432', 10),
+      username: process.env.DATABASE_USER || 'user',
+      password: process.env.DATABASE_PASSWORD || 'password',
+      database: process.env.DATABASE_NAME || 'appliance_service',
       autoLoadEntities: true,
-      synchronize: true,
+      synchronize: true, // Keep true for dev, false for prod
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
     }),
     AuthModule,
     UsersModule,
